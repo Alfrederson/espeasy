@@ -1,4 +1,5 @@
 <script>
+    import { fly, fade } from "svelte/transition"
     export let title=""
     export let erro =""
 
@@ -27,13 +28,15 @@
 {#if aberto}
 <div class="modal fade {aberto ? "show" : ""}"
     style="display:block; top: 0px; position:fixed; width:100vw; height:100vh; background-color:rgba(0,0,0,0.25)">
-    <div class="modal-dialog {aberto ? "show" : ""} modal-lg">
+    <div class="modal-dialog {aberto ? "show" : ""} modal-lg"
+        in:fly={{ x: -200, duration: 200 }}
+        out:fade={{ duration: 100 }}>
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="staticBackdropLabel">{title}</h5>
             </div>
             <div class="modal-body">
-                <p>Parece que tem algo errado no seu código.</p>
+                <p>Tem alguma coisa errada!</p>
                 <ul>
                 {#each linhas as linha}
                     <li>{linha}</li>

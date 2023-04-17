@@ -5,16 +5,18 @@
     import { codigo } from "../codigo";
 
     import SerialPort from "../serial/serial";
+    import { uploader } from "../uploader";
 
     import Button from "../Button.svelte";
     import ModalErros from "../ModalErros.svelte";
-    import Layout from "./+layout.svelte";
 
+    import PopUpper from "../PopUpper.svelte";
 
-    /**
-     * @type {ModalErros}
-     */
-    let modalErros
+    /** @type {ModalErros}*/
+    let modalErros 
+
+    /** @type {PopUpper}*/
+    let popUpper   
 
     const compiler_url = import.meta.env.VITE_COMPILER_URL
     /**
@@ -30,6 +32,7 @@
      * @property {Uint8Array|undefined} bytes - The raw bytes associated with the estado, if any
      * @property {Erro|undefined} erro - Any error message associated with the estado
      * @property {string} info - Any information message associated with the estado
+     * @property {string} arquivoNome - Any information message associated with the estado
      * @property {boolean} podeUpar - Indicates whether the estado can be uploaded
      * @property {number} estadoConexao - estado atual
      * @property {SerialPort|undefined} serialPort
@@ -55,6 +58,7 @@
         erro       : undefined,
         info       : "",
         podeUpar   : false,
+        arquivoNome: "user.lua",
 
         estadoConexao : DESCONECTADO,
 
@@ -106,14 +110,15 @@
         }
         let buffer = await response.arrayBuffer()
         estado.bytes    = new Uint8Array(buffer);   
-        estado.info     = "OK! Sketch tem "+estado.bytes.length + " bytes."
+
+        popUpper.adicionar({ emoji: "🌐", msg: "OK! Sketch tem "+estado.bytes.length + " bytes."})
     }
 
     // Isso vai fazer o seguinte:
     // - ver se a última compilação foi válida.
     // - ver o tamanho do firmware.
     // - enviar o comando _up( "firmware.lc" , tamanho ) pro interpretador de lua
-    // - quando terminar, vai enviar o comando dofile("firmware.lc")
+    // - quando terminar, vai enviar o comando dofile(estado.arquivoNome)
     /**
      * @param {number | undefined} x
      */
@@ -144,50 +149,6 @@
     let modo = STATE_IDLE;
 
 
-    const uploader = {
-        bytes : new Uint8Array(0),
-        to_go : 0,
-        start : 0,
-        end   : 16,
-        finished: false,
-        busy    : false,
-        /**
-         * @param {Uint8Array} bytes
-         */
-        prepareUpload(bytes){
-            this.bytes    = bytes
-            this.to_go    = bytes.length
-            this.start    = 0
-            this.end      = 16
-            this.finished=false
-            this.busy    =true
-            console.log("Enviarei "+bytes.length+" bytes")
-        },
-        sendPart(){
-            if(!this.bytes)
-                return;
-            // ooooooooooooooooooooooooooooo
-            // ^start      ^end
-            // ooooooooooooooooooooooooooooo
-            //              ^start      ^end
-            // ooooooooooooooooooooooooooooo
-            //                          ^s.^end
-            let pack = this.bytes.slice( this.start, this.end)
-            this.start = this.end
-            this.end = this.to_go >= 16 ? this.start + 16 : this.start+ this.to_go
-            this.to_go -= this.to_go >= 16 ? 16 : this.to_go
-            // manda...
-            estado.serialPort?.sendBytes([...pack])
-
-            if(this.to_go == 0){
-                this.finished = true
-                this.busy     = false
-                estado.podeUpar = true
-                return
-            }
-
-        }
-    }
 
     /**
      * @param {string} msg
@@ -203,21 +164,38 @@
 
         let parts = msg.split(" ")
 
-        if(parts[0] == "BEGIN" || parts[0] == "OK"){
+        if(parts[0] == "BEGIN"){
+            // segunda parte é o tamanho do pacote.
+            console.log("Pack size: "+parts[1])
+            uploader.setPackSize(  parseInt( parts[1] )  )
+            uploader.sendPart()
+            return
+        }
+
+        if(parts[0] == "OK"){
             uploader.sendPart()
             return
         }
 
         if(parts[0] == "END"){
-            sendString(`dofile("user.lua")\n`)
+            // sendString(`dofile('"${estado.arquivoNome}"')\n`)
+            popUpper.adicionar({ emoji: "🆙", msg : "Pronto!"})
             return
+        }
+
+        if(parts[0] == "SAY" || parts[0] == "ERRO"){
+            popUpper.adicionar({ emoji: "🤖", msg : msg.slice(4)})
         }
 
     }
 
     async function upar(){
         if(!estado.bytes){
-            console.log("E 100 bytes")
+            modalErros.abrir(
+                "Ops",
+                "Não tem um sketch compilado ainda.",
+                ""
+            )
             return;
         }
         if(estado.estadoConexao !== CONECTADO){
@@ -228,15 +206,20 @@
             console.log("Uploader busy")
             return;
         }
-        sendString("uart.up("+estado.bytes.length+")\n")        
-        uploader.prepareUpload(estado.bytes)
+
+        sendString('uart.up("'+estado.arquivoNome+'",'+estado.bytes.length+")\n")        
+        uploader.prepareUpload(estado.bytes, estado.serialPort, {
+            onFinished(){
+                estado.podeUpar = true
+            }
+        })
     }  
     
     async function rodar(){
         if(estado.estadoConexao !== CONECTADO)
             return;
 
-        sendString(`dofile("user.lua")\n`)
+        sendString(`dofile("${estado.arquivoNome}")\n`)
     }
 
     function conectar(){
@@ -261,7 +244,7 @@
                     if(  estado.recebido[ estado.recebido.length -1] === "\n" ){
                         let msg = estado.recebido.trim()
                         processar_mensagem(msg)
-                        console.log("L["+msg+"]")
+                        console.log(msg)
                         estado.recebido = ""
                     }                    
                 }
@@ -269,6 +252,8 @@
             onConnect(x){
                 console.log("Conectado!")
                 estado.estadoConexao = CONECTADO
+
+                popUpper.adicionar({ emoji: "🔌", msg: "Conectado!", tempo: 1500})
             },
             onDisconnect(){
             },
@@ -291,10 +276,17 @@
 
 </script>
 
+<style>
+    .editor{
+        flex-grow:1;
+    }
+</style>
+
 <svelte:head>
     <title>ESPEasy</title>
 </svelte:head>
 
+<PopUpper bind:this={popUpper}/>
 <ModalErros bind:this={modalErros} />
     
 <div class="row">
@@ -305,20 +297,17 @@
         <h5>{estado.info ?? ""}</h5>
     </div>
 </div>
-<h6>Lua.cross.cloud: {compiler_url.slice(0,20) + "..." }</h6>  
 
-<textarea class="form-control" rows="20" bind:value={estado.fonte} />
 
-<p>
-    {estado.podeUpar}
-    {estado.estadoConexao}
-    {uploader.busy}
-    {!estado.podeUpar || uploader.busy}
-    {uparDisabled}
-</p>
-<div class="is-dark mt-3">
-    <Button emoji="🛠️" texto="Compilar"  on:click={compilar} disabled={estado.aguardando}/>
+<textarea class="form-control editor mb-3" rows="20" bind:value={estado.fonte} />
+
+<div class="input-group" style="max-width:36em">
+    <div class="input-group-text">Nome do arquivo:</div>
+    <input type="text" class="form-control" placeholder="init.lua" bind:value={estado.arquivoNome}/>
+</div>
+<div class="btn-group mt-3" style="max-width:36em">
     <Button emoji="🔌" texto="{textoBotaoConectar} " on:click={conectar} disabled={ estado.estadoConexao == CONECTANDO }/>
+    <Button emoji="🛠️" texto="Compilar"  on:click={compilar} disabled={estado.aguardando}/>
     <Button emoji="🔥" texto="{textoBotaoUpar}"     on:click={upar}    disabled={ uparDisabled }/>
     <Button emoji="🚀" texto="Executar" on:click={rodar} disabled={ estado.estadoConexao !== CONECTADO}/> 
 </div>
