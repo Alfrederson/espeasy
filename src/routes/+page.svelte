@@ -11,14 +11,25 @@
     import ModalErros from "../ModalErros.svelte";
 
     import PopUpper from "../PopUpper.svelte";
+    import ModalArquivo from "../ModalArquivo.svelte";
 
     /** @type {ModalErros}*/
     let modalErros 
+
+    /** @type {ModalArquivo}*/
+    let modalArquivo
 
     /** @type {PopUpper}*/
     let popUpper   
 
     const compiler_url = import.meta.env.VITE_COMPILER_URL
+
+    /**
+     * @typedef {Object} Arquivo
+     * @property {string} nome
+     * @property {number} tamanho
+    */
+
     /**
      * @typedef {Object} Erro
      * @property {string} err?
@@ -31,12 +42,14 @@
      * @property {string} fonte - The source code associated with the estado
      * @property {Uint8Array|undefined} bytes - The raw bytes associated with the estado, if any
      * @property {Erro|undefined} erro - Any error message associated with the estado
-     * @property {string} info - Any information message associated with the estado
+     * @property {any} info - Any information message associated with the estado
      * @property {string} arquivoNome - Any information message associated with the estado
      * @property {boolean} podeUpar - Indicates whether the estado can be uploaded
      * @property {number} estadoConexao - estado atual
      * @property {SerialPort|undefined} serialPort
      * @property {string} recebido
+     * @property {Arquivo[]} fileList
+     * @property {boolean} showFiles
      */
 
      const DESCONECTADO =0,
@@ -56,7 +69,7 @@
         fonte      : "",
         bytes      : undefined,
         erro       : undefined,
-        info       : "",
+        info       : {compilados: 0, tempo : "0ms"},
         podeUpar   : false,
         arquivoNome: "user.lua",
 
@@ -64,7 +77,13 @@
 
         serialPort : undefined,
         recebido   : "",
+
+        fileList : [
+            {nome : "teste.lua", tamanho: 123}
+        ],
+        showFiles : false
     }
+
 
     // Isso vai fazer o seguinte:
     // - pega o código fonte
@@ -74,14 +93,11 @@
     if(typeof window !== 'undefined')
         estado.fonte = localStorage.getItem("codigo") ?? codigo
     async function compilar(){
-
         localStorage.setItem("codigo", estado.fonte)
-
         if(estado.aguardando)
             return;
         estado.aguardando = true
-        estado.erro = undefined
-        estado.info = ""
+        
 
         let myHeaders = new Headers();
         myHeaders.append("Content-Type", "text/plain");
@@ -90,29 +106,27 @@
             method: 'POST',
             headers: myHeaders,
             body: estado.fonte,
-        };
-
+        }
         let response = await fetch(compiler_url +"/compila/53", requestOptions)
 
         estado.aguardando = false
-
+        
         if(response.status != 200){
             let erro = await response.json()
-            estado.erro = erro
-
             modalErros.abrir(
                 erro.msg,
                 erro.err,
                 erro.res
             )
-
             return
         }
         let buffer = await response.arrayBuffer()
         estado.bytes    = new Uint8Array(buffer);   
 
         popUpper.adicionar({ emoji: "🌐", msg: "OK! Sketch tem "+estado.bytes.length + " bytes."})
+        fetch( compiler_url +"/status" ).then( result=> result.json() ).then( result => estado.info = result)
     }
+
 
     // Isso vai fazer o seguinte:
     // - ver se a última compilação foi válida.
@@ -128,7 +142,6 @@
         })
     }
 
-
     /**
      * Envia uma string pro esp32 com a minha api horrorosa
      * @param {string} str - The input string to convert.
@@ -143,14 +156,8 @@
         estado.serialPort.sendBytes(uintArray)
     }
 
-    const STATE_BOOTING = 0;
-    const STATE_IDLE    = 1;
-
-    let modo = STATE_IDLE;
-
-
-
     /**
+     * Isso vai depender do "estado" atual da "Máquina."
      * @param {string} msg
      */
      function processar_mensagem(msg){
@@ -172,6 +179,18 @@
             return
         }
 
+        if(parts[0] == "FILES"){
+            estado.fileList = []
+            return
+        }
+        if(parts[0] == "FILE"){
+            estado.fileList.push({
+                "nome"   : parts[1],
+                "tamanho": parseInt(parts[2])
+            })
+            estado.fileList = estado.fileList
+        }
+
         if(parts[0] == "OK"){
             uploader.sendPart()
             return
@@ -184,13 +203,14 @@
         }
 
         if(parts[0] == "SAY" || parts[0] == "ERRO"){
-            popUpper.adicionar({ emoji: "🤖", msg : msg.slice(4)})
+            popUpper.adicionar({ emoji: "🤖", msg : msg.slice(4), cor: "success"})
         }
 
     }
 
     async function upar(){
         if(!estado.bytes){
+            popUpper.adicionar({ msg: "Compile o código antes de upar.", cor: "warning"})
             modalErros.abrir(
                 "Ops",
                 "Não tem um sketch compilado ainda.",
@@ -199,11 +219,11 @@
             return;
         }
         if(estado.estadoConexao !== CONECTADO){
-            console.log("estadoConexão != ",CONECTADO,"(",estado.estadoConexao,")")
+            popUpper.adicionar({ msg: "Não estou conectado na placa", cor: "warning"})
             return;
         }
         if(uploader.busy){
-            console.log("Uploader busy")
+            popUpper.adicionar({ msg: "Upando...", cor: "warning"})
             return;
         }
 
@@ -278,7 +298,7 @@
 
 <style>
     .editor{
-        flex-grow:1;
+        display:flex;
     }
 </style>
 
@@ -288,27 +308,41 @@
 
 <PopUpper bind:this={popUpper}/>
 <ModalErros bind:this={modalErros} />
-    
-<div class="row">
-    <div class="col sm-4">
-        <h5>ESPEasy</h5>
-    </div>
-    <div class="col sm-5">
-        <h5>{estado.info ?? ""}</h5>
-    </div>
+<ModalArquivo
+    bind:this={modalArquivo}
+    arquivos={estado.fileList} />
+
+<div class="header">
+        <strong>espeasy</strong>
+        {#if estado.info}
+        {estado.info.compilados} códigos compilados em {estado.info.tempo}
+        {/if}        
 </div>
 
+<div class="editor mb-2" style="display:flex; flex-flow:row; flex-grow:1">
+    <textarea class="form-control" style="height: 100%; flex-grow:1" bind:value={estado.fonte} />
+</div>
 
-<textarea class="form-control editor mb-3" rows="20" bind:value={estado.fonte} />
+{#if estado.showFiles}
+    <div class="container fixed-top bg-white">
+        <ul class="list-group list-group-flush">
+            {#each estado.fileList as file}
+                <li class="list-group-item bg-transparent" style="white-space:nowrap">{file.nome} {file.tamanho} bytes </li>
+            {/each}
+        </ul>
+    </div>
+{/if}
 
 <div class="input-group" style="max-width:36em">
     <div class="input-group-text">Nome do arquivo:</div>
     <input type="text" class="form-control" placeholder="init.lua" bind:value={estado.arquivoNome}/>
+    <button class="btn input-group-button" on:click={ modalArquivo.abrir }>Ver arquivos...</button>
 </div>
-<div class="btn-group mt-3" style="max-width:36em">
+<div class="btn-group mt-2 gap-1" style="max-width:40em">
     <Button emoji="🔌" texto="{textoBotaoConectar} " on:click={conectar} disabled={ estado.estadoConexao == CONECTANDO }/>
     <Button emoji="🛠️" texto="Compilar"  on:click={compilar} disabled={estado.aguardando}/>
     <Button emoji="🔥" texto="{textoBotaoUpar}"     on:click={upar}    disabled={ uparDisabled }/>
     <Button emoji="🚀" texto="Executar" on:click={rodar} disabled={ estado.estadoConexao !== CONECTADO}/> 
+
 </div>
 

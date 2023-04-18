@@ -8,6 +8,7 @@
     @property {number } [id] 
     @property {string } [emoji] 
     @property {string } [msg] 
+    @property {string } [cor]
     @property {number } [tempo] 
     */
 
@@ -32,6 +33,7 @@
      export function adicionar(msg){
         let novaMensagem = {...msg, id: ++uid }
         mensagens.unshift( novaMensagem )
+        if(mensagens.length > 6) mensagens.pop()
         mensagens = mensagens
 
         if(msg.tempo){
@@ -49,9 +51,9 @@
 <div class="container fixed-top" style="margin-top: 8em">
     {#each mensagens as mensagem, i (mensagem)}
     <!-- svelte-ignore a11y-click-events-have-key-events -->
-    <div class="alert alert-primary alert-dismissible shadow-sm"
+    <div class="alert alert-{mensagem.cor ?? "primary"} alert-dismissible shadow-sm"
         in:fly={{ x: -200, duration: 200 }}
-        out:fly={{ x: 200, duration: 200 }}>
+        out:fade={{ duration: 200 }}>
         {mensagem.emoji}
         <strong>{mensagem.msg}</strong>
         
