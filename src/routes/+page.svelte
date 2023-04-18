@@ -1,4 +1,5 @@
 <script>
+    // 100% GERADO PELO CHAT-GPT VERSÃO FREE
     // será que tem como fazer isso de um jeito melhor? no idea
     import flashConfig from "../firmware/esp32-wroom";
 
