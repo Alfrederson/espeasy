@@ -10,16 +10,20 @@
 
     import { fade } from "svelte/transition"
 
-    import Button from "../Button.svelte";
-    import ModalErros from "../ModalErros.svelte";
-    import PopUpper from "../PopUpper.svelte";
-    import ModalArquivo from "../ModalArquivo.svelte";
+    import Button from "../components/Button.svelte";
+    import ModalErros from "../components/ModalErros.svelte";
+    import PopUpper from "../components/PopUpper.svelte";
+    import ModalArquivo from "../components/ModalArquivo.svelte";
+    import ModalFirmwares from "../components/ModalFirmwares.svelte";
 
     /** @type {ModalErros}*/
     let modalErros 
 
     /** @type {ModalArquivo}*/
     let modalArquivo
+
+    /** @type {ModalFirmwares}*/
+    let modalFirmwares
 
     /** @type {PopUpper}*/
     let popUpper   
@@ -287,6 +291,11 @@
             estado.estadoConexao = DESCONECTADO
         })        
     }
+
+    function mostrarFirmwares(){
+        modalFirmwares.abrir()
+    }
+
     let textoBotaoUpar = "Upar";
     let textoBotaoConectar = "Conectar";
 
@@ -310,6 +319,8 @@
 
 <PopUpper bind:this={popUpper}/>
 <ModalErros bind:this={modalErros} />
+<ModalFirmwares bind:this={modalFirmwares} />
+
 <ModalArquivo
     bind:this={modalArquivo}
     arquivos={estado.fileList} />
@@ -347,6 +358,6 @@
     <Button emoji="🛠️" texto="Compilar"  on:click={compilar} disabled={estado.aguardando}/>
     <Button emoji="🔥" texto="{textoBotaoUpar}"     on:click={upar}    disabled={ uparDisabled }/>
     <Button emoji="🚀" texto="Executar" on:click={rodar} disabled={ estado.estadoConexao !== CONECTADO}/> 
-
+    <Button emoji="📋" texto="Firmware" on:click={ mostrarFirmwares }/>
 </div>
 

@@ -6,9 +6,9 @@
 
 const firmwares = {
     "esp32-wroom" : {
-        "bootloader.bin": 0x1000,
-        "partitions.bin": 0x8000,
-        "NodeMCU.bin"   : 0x10000    
+        "bootloader.bin": "0x1000",
+        "partitions.bin": "0x8000",
+        "NodeMCU.bin"   : "0x10000"    
     }
 }
 
