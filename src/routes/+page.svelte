@@ -1,16 +1,17 @@
 <script>
     // 100% GERADO PELO CHAT-GPT VERSÃO FREE
     // será que tem como fazer isso de um jeito melhor? no idea
-    import flashConfig from "../firmware/esp32-wroom";
+    import firmwares from "../firmwares/firmwares";
 
-    import { codigo } from "../codigo";
+    import { codigo }   from "../codigo";
+    import { uploader } from "../uploader";
 
     import SerialPort from "../serial/serial";
-    import { uploader } from "../uploader";
+
+    import { fade } from "svelte/transition"
 
     import Button from "../Button.svelte";
     import ModalErros from "../ModalErros.svelte";
-
     import PopUpper from "../PopUpper.svelte";
     import ModalArquivo from "../ModalArquivo.svelte";
 
@@ -316,7 +317,9 @@
 <div class="header">
         <strong>espeasy</strong>
         {#if estado.info}
+        <div in:fade={{duration: 1000}}>
         {estado.info.compilados} códigos compilados em {estado.info.tempo}
+        </div>
         {/if}        
 </div>
 
